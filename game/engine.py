@@ -16,9 +16,36 @@ except ImportError:
 class Game:
     def __init__(self, width=800, height=450, title="Geometry Dash"):
         pygame.init()
-        # Initialize mixer with specific parameters for better MP3 compatibility
-        pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=512)
-        pygame.mixer.init()
+        
+        # Initialize mixer with multiple fallback options for better audio compatibility
+        audio_initialized = False
+        
+        # Try different audio configurations
+        audio_configs = [
+            # Configuration optimale
+            {'frequency': 44100, 'size': -16, 'channels': 2, 'buffer': 512},
+            # Configuration de fallback 1
+            {'frequency': 22050, 'size': -16, 'channels': 2, 'buffer': 1024},
+            # Configuration de fallback 2 (plus compatible)
+            {'frequency': 44100, 'size': -16, 'channels': 1, 'buffer': 2048},
+            # Configuration minimale
+            {'frequency': 22050, 'size': -16, 'channels': 1, 'buffer': 4096}
+        ]
+        
+        for config in audio_configs:
+            try:
+                pygame.mixer.pre_init(**config)
+                pygame.mixer.init()
+                print(f"✅ Audio initialisé: {config}")
+                audio_initialized = True
+                break
+            except Exception as e:
+                print(f"⚠️ Échec config audio {config}: {e}")
+                continue
+        
+        if not audio_initialized:
+            print("❌ Impossible d'initialiser l'audio - le jeu continuera sans son")
+        
         self.width = width
         self.height = height
         self.screen = pygame.display.set_mode((width, height))
@@ -205,8 +232,13 @@ class Game:
             music_path = os.path.join(self.assets_path, self.level.music_file)
             if os.path.exists(music_path):
                 try:
+                    # Vérifier que l'audio est disponible
+                    if pygame.mixer.get_init() is None:
+                        print("⚠️ Audio non initialisé - pas de musique")
+                        return
+                    
                     pygame.mixer.music.load(music_path)
-                    pygame.mixer.music.set_volume(0.5)  # Volume réduit
+                    pygame.mixer.music.set_volume(0.7)  # Volume légèrement plus fort
                     pygame.mixer.music.play(-1)  # -1 = loop infinitely
                     print(f"🎵 Musique lancée avec succès!")
                 except pygame.error as e:
@@ -216,6 +248,8 @@ class Game:
                     print(f"❌ Erreur musique: {e}")
             else:
                 print(f"❌ Fichier introuvable: {music_path}")
+        else:
+            print("ℹ️ Pas de fichier musique défini pour ce niveau")
 
     def generate_combo(self):
         """Génère un combo aléatoire de 2 lettres"""
@@ -394,25 +428,35 @@ class Game:
             
         try:
             # Charger le son de game over
-            game_over_sound_path = os.path.join(self.assets_path, 'sounds', 'game_over.wav')
-            if os.path.exists(game_over_sound_path):
-                self.game_over_sound = pygame.mixer.Sound(game_over_sound_path)
-                print("Son de game over chargé!")
+            if pygame.mixer.get_init() is not None:
+                game_over_sound_path = os.path.join(self.assets_path, 'sounds', 'game_over.wav')
+                if os.path.exists(game_over_sound_path):
+                    self.game_over_sound = pygame.mixer.Sound(game_over_sound_path)
+                    print("Son de game over chargé!")
+            else:
+                print("⚠️ Audio non disponible - sons désactivés")
         except Exception as e:
             print(f"Erreur lors du chargement du son game over: {e}")
             
         try:
             # Charger le son de QTE
-            qte_sound_path = os.path.join(self.assets_path, 'sounds', 'qte_alert.wav')
-            if os.path.exists(qte_sound_path):
-                self.qte_sound = pygame.mixer.Sound(qte_sound_path)
-                print("Son de QTE chargé!")
+            if pygame.mixer.get_init() is not None:
+                qte_sound_path = os.path.join(self.assets_path, 'sounds', 'qte_alert.wav')
+                if os.path.exists(qte_sound_path):
+                    self.qte_sound = pygame.mixer.Sound(qte_sound_path)
+                    print("Son de QTE chargé!")
         except Exception as e:
             print(f"Erreur lors du chargement du son QTE: {e}")
 
     def run(self, level_path: str):
         self.load_level(level_path)
         self.load_game_over_assets()  # Charger les assets de game over
+        
+        # S'assurer que la musique joue (au cas où elle aurait été arrêtée précédemment)
+        try:
+            pygame.mixer.music.play(-1)  # -1 = loop infinitely
+        except Exception as e:
+            print(f"Info: Relancement musique échoué: {e}")
         
         running = True
         game_over = False
